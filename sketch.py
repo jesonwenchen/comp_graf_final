@@ -3,7 +3,7 @@
 # Projeto de Computação Gráfica — Py5Script
 # ============================================================
 # Este programa cria um mini-mundo voxel estilo Minecraft com:
-#   - Câmera FPS com mouse (pointer lock) e WASD
+#   - Câmera em terceira pessoa com personagem visível
 #   - Geração procedural de terreno com Perlin noise
 #   - Shaders GLSL para texturas, neblina e animação de água
 #   - Física: gravidade e colisão AABB
@@ -14,6 +14,9 @@
 # Renderer: WEBGL
 # Shaders: GLSL ES 1.00 (WebGL 1.0)
 # ============================================================
+
+# Importa módulo random do Python (p5.js random() não é auto-prefixado no Py5Script)
+import random as pyrandom
 
 # =================================================================
 # CONSTANTES DO MUNDO
@@ -41,6 +44,10 @@ JUMP_FORCE    = 0.13   # Impulso vertical ao pular
 PLAYER_HEIGHT = 1.62   # Altura dos olhos do jogador acima dos pés
 PLAYER_RADIUS = 0.3    # Meio-largura da caixa de colisão do jogador
 REACH         = 6      # Alcance máximo para interagir com blocos
+
+# --- Câmera Terceira Pessoa ---
+CAM_DIST      = 6.0    # Distância da câmera atrás do jogador
+CAM_UP        = 3.0    # Altura da câmera acima do jogador
 
 # =================================================================
 # VARIÁVEIS GLOBAIS
@@ -108,9 +115,9 @@ def createTextureAtlas():
     # Simula textura de terra com ruído nos canais RGB
     for px in range(16):
         for py in range(16):
-            r = 139 + int(random(-20, 20))
-            g = 90  + int(random(-15, 15))
-            b = 43  + int(random(-12, 12))
+            r = 139 + pyrandom.randint(-20, 20)
+            g = 90  + pyrandom.randint(-15, 15)
+            b = 43  + pyrandom.randint(-12, 12)
             pg.fill(r, g, b)
             pg.rect(px, py, 1, 1)
 
@@ -118,9 +125,9 @@ def createTextureAtlas():
     # Vista de cima do bloco de grama
     for px in range(16):
         for py in range(16):
-            r = 55  + int(random(-12, 12))
-            g = 140 + int(random(-20, 20))
-            b = 15  + int(random(-8, 8))
+            r = 55  + pyrandom.randint(-12, 12)
+            g = 140 + pyrandom.randint(-20, 20)
+            b = 15  + pyrandom.randint(-8, 8)
             pg.fill(r, g, b)
             pg.rect(16 + px, py, 1, 1)
 
@@ -131,23 +138,23 @@ def createTextureAtlas():
         for py in range(16):
             if py < 3:
                 # Faixa verde superior (grama)
-                r = 55  + int(random(-12, 12))
-                g = 140 + int(random(-20, 20))
-                b = 15  + int(random(-8, 8))
+                r = 55  + pyrandom.randint(-12, 12)
+                g = 140 + pyrandom.randint(-20, 20)
+                b = 15  + pyrandom.randint(-8, 8)
             else:
                 # Parte inferior (terra)
-                r = 139 + int(random(-20, 20))
-                g = 90  + int(random(-15, 15))
-                b = 43  + int(random(-12, 12))
+                r = 139 + pyrandom.randint(-20, 20)
+                g = 90  + pyrandom.randint(-15, 15)
+                b = 43  + pyrandom.randint(-12, 12)
             pg.fill(r, g, b)
             pg.rect(32 + px, py, 1, 1)
 
     # --- Tile 3: Água (azul com leve variação) ---
     for px in range(16):
         for py in range(16):
-            r = 25  + int(random(-8, 8))
-            g = 90  + int(random(-15, 15))
-            b = 200 + int(random(-15, 15))
+            r = 25  + pyrandom.randint(-8, 8)
+            g = 90  + pyrandom.randint(-15, 15)
+            b = 200 + pyrandom.randint(-15, 15)
             pg.fill(r, g, b)
             pg.rect(48 + px, py, 1, 1)
 
@@ -167,7 +174,7 @@ def generateTerrain():
     world = {}
 
     # Seed aleatório garante terreno diferente a cada execução
-    noiseSeed(int(random(0, 10000)))
+    noiseSeed(pyrandom.randint(0, 10000))
 
     for x in range(WORLD_SIZE):
         for z in range(WORLD_SIZE):
@@ -320,7 +327,8 @@ def rebuildGeometry():
             beginShape(QUADS)
             for face in solid_faces:
                 for vx, vy, vz, u, v in face:
-                    # Nega Y porque p5.js tem Y invertido
+                    # Nega Y: p5.js WEBGL aplica Y-flip na projeção,
+                    # negando aqui faz a dupla negação resultar em Y+ = cima
                     vertex(vx, -vy, vz, u, v)
             endShape()
         solid_geo = buildGeometry(make_solid)
@@ -472,6 +480,70 @@ def drawCrosshair():
     # Em WEBGL, a origem (0,0) é o centro do canvas
     line(-10, 0, 10, 0)   # Linha horizontal da mira
     line(0, -10, 0, 10)   # Linha vertical da mira
+    pop()
+
+
+# =================================================================
+# PERSONAGEM (Modelo 3D do jogador — terceira pessoa)
+# =================================================================
+# Desenha um boneco estilo Minecraft feito de boxes.
+# Posicionado em (cam_x, cam_y, cam_z) e rotacionado pelo yaw.
+# =================================================================
+def drawPlayer():
+    """Desenha o modelo do personagem na posição do jogador."""
+    push()
+    # Desativa shader customizado — personagem usa cores sólidas
+    resetShader()
+    noStroke()
+
+    # Posiciona no centro do jogador (Y negado para consistência com o mundo)
+    translate(cam_x, -(cam_y - PLAYER_HEIGHT * 0.5), cam_z)
+    # Flip Y local: dentro do personagem, Y+ = cima (intuitivo)
+    scale(1, -1, 1)
+    # Rotaciona para a direção que o jogador está olhando
+    rotateY(-yaw)
+
+    # --- Cabeça (cor de pele) ---
+    push()
+    translate(0, 0.65, 0)         # Acima do corpo
+    fill(230, 190, 150)           # Bege
+    box(0.5, 0.5, 0.5)
+    pop()
+
+    # --- Corpo / Torso (camiseta azul) ---
+    push()
+    fill(50, 100, 200)            # Azul
+    box(0.5, 0.75, 0.3)
+    pop()
+
+    # --- Braço Esquerdo ---
+    push()
+    translate(-0.4, 0, 0)
+    fill(230, 190, 150)
+    box(0.2, 0.75, 0.25)
+    pop()
+
+    # --- Braço Direito ---
+    push()
+    translate(0.4, 0, 0)
+    fill(230, 190, 150)
+    box(0.2, 0.75, 0.25)
+    pop()
+
+    # --- Perna Esquerda (calça escura) ---
+    push()
+    translate(-0.15, -0.75, 0)
+    fill(60, 60, 120)             # Azul escuro
+    box(0.2, 0.75, 0.25)
+    pop()
+
+    # --- Perna Direita ---
+    push()
+    translate(0.15, -0.75, 0)
+    fill(60, 60, 120)
+    box(0.2, 0.75, 0.25)
+    pop()
+
     pop()
 
 
@@ -630,15 +702,20 @@ def draw():
         updatePhysics()
 
     # ==========================================================
-    # FASE 1.2: Aplicação da Câmera
+    # CÂMERA TERCEIRA PESSOA (orbital)
     # ==========================================================
-    # camera(olho_x, olho_y, olho_z, alvo_x, alvo_y, alvo_z, up_x, up_y, up_z)
-    # Nota: Y é negado porque p5.js WEBGL tem Y apontando para baixo
-    # Up = (0, -1, 0) compensa a inversão de Y
+    # Todas as coordenadas Y são negadas para compensar o Y-flip
+    # que o p5.js WEBGL aplica internamente na projeção.
+    # Assim: mundo Y=12 (alto) → render Y=-12 → após flip = topo da tela
+    eye_x = cam_x - sin(yaw) * CAM_DIST
+    eye_y = -(cam_y + CAM_UP)       # Câmera acima do jogador (negado)
+    eye_z = cam_z - cos(yaw) * CAM_DIST
+
+    # Câmera olha para o jogador (Y negado)
     camera(
-        cam_x,          -cam_y,          cam_z,
-        cam_x + fx,     -(cam_y + fy),   cam_z + fz,
-        0,              -1,              0
+        eye_x,   eye_y,   eye_z,       # posição da câmera
+        cam_x,   -cam_y,  cam_z,       # alvo (jogador, Y negado)
+        0,       1,       0            # vetor up (positivo = cima no render)
     )
 
     # ==========================================================
@@ -670,6 +747,11 @@ def draw():
     shader_base.setUniform("uIsWater", 1.0)
     if water_geo is not None:
         model(water_geo)
+
+    # ==========================================================
+    # PERSONAGEM (modelo 3D do jogador)
+    # ==========================================================
+    drawPlayer()
 
     # ==========================================================
     # FASE 6: CROSSHAIR (overlay 2D)

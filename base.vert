@@ -43,7 +43,7 @@ void main() {
     // Y_novo = Y_atual + sin(tempo * vel + X * freq + Z * freq) * amplitude
     // ==========================================================
     if (uIsWater > 0.5) {
-        pos.y += sin(uTempo * 2.0 + pos.x * 3.0 + pos.z * 3.0) * 0.06;
+        pos.y -= sin(uTempo * 2.0 + pos.x * 3.0 + pos.z * 3.0) * 0.06;
     }
 
     // Repassa coordenadas UV para o fragment shader
