@@ -3,7 +3,7 @@
 # Projeto de Computação Gráfica — Py5Script
 # ============================================================
 # Este programa cria um mini-mundo voxel estilo Minecraft com:
-#   - Câmera em terceira pessoa com personagem visível
+#   - Câmera em primeira pessoa (FPS) com braço estilo Minecraft
 #   - Geração procedural de terreno com Perlin noise
 #   - Shaders GLSL para texturas, neblina e animação de água
 #   - Física: gravidade e colisão AABB
@@ -45,9 +45,7 @@ PLAYER_HEIGHT = 1.62   # Altura dos olhos do jogador acima dos pés
 PLAYER_RADIUS = 0.3    # Meio-largura da caixa de colisão do jogador
 REACH         = 6      # Alcance máximo para interagir com blocos
 
-# --- Câmera Terceira Pessoa ---
-CAM_DIST      = 6.0    # Distância da câmera atrás do jogador
-CAM_UP        = 3.0    # Altura da câmera acima do jogador
+
 
 # =================================================================
 # VARIÁVEIS GLOBAIS
@@ -484,64 +482,56 @@ def drawCrosshair():
 
 
 # =================================================================
-# PERSONAGEM (Modelo 3D do jogador — terceira pessoa)
+# BRAÇO DO JOGADOR (HUD — primeira pessoa, estilo Minecraft)
 # =================================================================
-# Desenha um boneco estilo Minecraft feito de boxes.
-# Posicionado em (cam_x, cam_y, cam_z) e rotacionado pelo yaw.
+# Desenha um braço 3D no canto inferior direito da tela como
+# overlay, independente da câmera do mundo. Usa projeção
+# ortográfica separada para ficar fixo na tela.
+# Inclui micro-animação de balanço (idle bobbing).
 # =================================================================
-def drawPlayer():
-    """Desenha o modelo do personagem na posição do jogador."""
+def drawArm():
+    """Desenha o braço do jogador no HUD (canto inferior direito)."""
     push()
-    # Desativa shader customizado — personagem usa cores sólidas
+    # Desativa shader customizado e reseta a câmera
     resetShader()
+    # Projeção perspectiva curta para dar profundidade ao braço
+    camera(0, 0, 200, 0, 0, 0, 0, 1, 0)
+    perspective(PI / 4.0, width / height, 1.0, 500.0)
+
     noStroke()
 
-    # Posiciona no centro do jogador (Y negado para consistência com o mundo)
-    translate(cam_x, -(cam_y - PLAYER_HEIGHT * 0.5), cam_z)
-    # Flip Y local: dentro do personagem, Y+ = cima (intuitivo)
-    scale(1, -1, 1)
-    # Rotaciona para a direção que o jogador está olhando
-    rotateY(-yaw)
+    # Posiciona no canto inferior direito da tela
+    translate(130, 80, 50)
 
-    # --- Cabeça (cor de pele) ---
-    push()
-    translate(0, 0.65, 0)         # Acima do corpo
-    fill(230, 190, 150)           # Bege
-    box(0.5, 0.5, 0.5)
-    pop()
+    # --- Micro-animação de idle bobbing ---
+    # O braço balança suavemente simulando respiração
+    bob = sin(millis() / 400.0) * 3.0
+    translate(0, bob, 0)
+    # Leve rotação de balanço
+    rotateZ(sin(millis() / 500.0) * 0.03)
 
-    # --- Corpo / Torso (camiseta azul) ---
-    push()
-    fill(50, 100, 200)            # Azul
-    box(0.5, 0.75, 0.3)
-    pop()
+    # Inclina o braço para frente (como estendido)
+    rotateX(-0.4)
+    rotateZ(0.15)
 
-    # --- Braço Esquerdo ---
+    # --- Braço (cor de pele) ---
     push()
-    translate(-0.4, 0, 0)
     fill(230, 190, 150)
-    box(0.2, 0.75, 0.25)
+    box(30, 90, 25)               # Braço alongado verticalmente
     pop()
 
-    # --- Braço Direito ---
+    # --- Mão (levemente mais escura) ---
     push()
-    translate(0.4, 0, 0)
-    fill(230, 190, 150)
-    box(0.2, 0.75, 0.25)
+    translate(0, 55, 0)
+    fill(215, 175, 135)
+    box(28, 25, 23)               # Mão no final do braço
     pop()
 
-    # --- Perna Esquerda (calça escura) ---
+    # --- Manga da camiseta (azul) ---
     push()
-    translate(-0.15, -0.75, 0)
-    fill(60, 60, 120)             # Azul escuro
-    box(0.2, 0.75, 0.25)
-    pop()
-
-    # --- Perna Direita ---
-    push()
-    translate(0.15, -0.75, 0)
-    fill(60, 60, 120)
-    box(0.2, 0.75, 0.25)
+    translate(0, -40, 0)
+    fill(50, 100, 200)
+    box(32, 20, 27)               # Manga cobrindo o ombro
     pop()
 
     pop()
@@ -702,20 +692,17 @@ def draw():
         updatePhysics()
 
     # ==========================================================
-    # CÂMERA TERCEIRA PESSOA (orbital)
+    # CÂMERA PRIMEIRA PESSOA (FPS)
     # ==========================================================
-    # Todas as coordenadas Y são negadas para compensar o Y-flip
-    # que o p5.js WEBGL aplica internamente na projeção.
-    # Assim: mundo Y=12 (alto) → render Y=-12 → após flip = topo da tela
-    eye_x = cam_x - sin(yaw) * CAM_DIST
-    eye_y = -(cam_y + CAM_UP)       # Câmera acima do jogador (negado)
-    eye_z = cam_z - cos(yaw) * CAM_DIST
-
-    # Câmera olha para o jogador (Y negado)
+    # A câmera está na posição dos olhos do jogador.
+    # Olha na direção definida por yaw (horizontal) e pitch
+    # (vertical), usando o vetor forward (fx, fy, fz).
+    # Y negado para compensar o Y-flip do p5.js WEBGL.
+    # ==========================================================
     camera(
-        eye_x,   eye_y,   eye_z,       # posição da câmera
-        cam_x,   -cam_y,  cam_z,       # alvo (jogador, Y negado)
-        0,       1,       0            # vetor up (positivo = cima no render)
+        cam_x,          -cam_y,          cam_z,          # olho do jogador
+        cam_x + fx,     -(cam_y + fy),   cam_z + fz,     # ponto-alvo
+        0,              1,               0               # vetor up
     )
 
     # ==========================================================
@@ -749,9 +736,9 @@ def draw():
         model(water_geo)
 
     # ==========================================================
-    # PERSONAGEM (modelo 3D do jogador)
+    # BRAÇO DO JOGADOR (HUD primeira pessoa)
     # ==========================================================
-    drawPlayer()
+    drawArm()
 
     # ==========================================================
     # FASE 6: CROSSHAIR (overlay 2D)
