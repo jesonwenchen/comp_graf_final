@@ -626,7 +626,7 @@ def draw():
     # ==========================================================
     # movedX/movedY: delta do mouse desde o último frame
     # Com pointer lock ativo, dão movimento relativo ilimitado
-    yaw   += movedX * SENSITIVITY
+    yaw   -= movedX * SENSITIVITY
     pitch  = constrain(pitch - movedY * SENSITIVITY,
                        -HALF_PI + 0.1, HALF_PI - 0.1)
 
