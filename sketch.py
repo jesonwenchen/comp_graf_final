@@ -490,48 +490,50 @@ def drawCrosshair():
 # Inclui micro-animação de balanço (idle bobbing).
 # =================================================================
 def drawArm():
-    """Desenha o braço do jogador no HUD (canto inferior direito)."""
+    """Desenha o braço do jogador no HUD (canto inferior direito).
+    
+    O braço sai do canto inferior direito da tela e aponta
+    na direção do centro, como no Minecraft.
+    """
     push()
-    # Desativa shader customizado e reseta a câmera
     resetShader()
-    # Projeção perspectiva curta para dar profundidade ao braço
-    camera(0, 0, 200, 0, 0, 0, 0, 1, 0)
-    perspective(PI / 4.0, width / height, 1.0, 500.0)
+
+    # Limpa depth buffer para o braço ficar na frente do mundo
+    gl = drawingContext
+    gl.clear(gl.DEPTH_BUFFER_BIT)
+
+    # Câmera fixa para o espaço do HUD
+    camera(0, 0, 300, 0, 0, 0, 0, 1, 0)
+    perspective(PI / 3.0, width / height, 1.0, 1000.0)
 
     noStroke()
 
-    # Posiciona no canto inferior direito da tela
-    translate(130, 80, 50)
+    # --- Posiciona na origem do braço: canto inferior direito ---
+    # Desloca para fora da tela no canto inferior direito
+    translate(200, 200, 100)
 
-    # --- Micro-animação de idle bobbing ---
-    # O braço balança suavemente simulando respiração
+    # --- Micro-animação idle (respiração) ---
     bob = sin(millis() / 400.0) * 3.0
     translate(0, bob, 0)
-    # Leve rotação de balanço
-    rotateZ(sin(millis() / 500.0) * 0.03)
 
-    # Inclina o braço para frente (como estendido)
-    rotateX(-0.4)
-    rotateZ(0.15)
+    # --- Orientação: aponta do canto inferior direito → centro ---
+    # Rotaciona para que o braço se estenda diagonalmente
+    rotateZ(-0.8)       # Gira para apontar para cima-esquerda
+    rotateX(-0.3)       # Leve inclinação para frente
 
-    # --- Braço (cor de pele) ---
+    # --- Braço / antebraço (cor de pele) ---
+    # O braço é um box alongado; a base fica fora da tela
+    # e a ponta (mão) aponta em direção ao centro
     push()
     fill(230, 190, 150)
-    box(30, 90, 25)               # Braço alongado verticalmente
+    box(35, 130, 28)
     pop()
 
-    # --- Mão (levemente mais escura) ---
+    # --- Mão (ponta do braço, levemente mais escura) ---
     push()
-    translate(0, 55, 0)
+    translate(0, -80, 0)
     fill(215, 175, 135)
-    box(28, 25, 23)               # Mão no final do braço
-    pop()
-
-    # --- Manga da camiseta (azul) ---
-    push()
-    translate(0, -40, 0)
-    fill(50, 100, 200)
-    box(32, 20, 27)               # Manga cobrindo o ombro
+    box(33, 28, 26)
     pop()
 
     pop()
