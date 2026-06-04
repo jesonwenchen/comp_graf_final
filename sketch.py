@@ -40,7 +40,7 @@ WATER = 3              # Água (azul translúcido)
 MOVE_SPEED    = 0.15   # Velocidade de deslocamento por frame
 SENSITIVITY   = 0.003  # Sensibilidade de rotação do mouse
 GRAVITY       = 0.008  # Aceleração gravitacional por frame
-JUMP_FORCE    = 0.13   # Impulso vertical ao pular
+JUMP_FORCE    = 0.2   # Impulso vertical ao pular
 PLAYER_HEIGHT = 1.62   # Altura dos olhos do jogador acima dos pés
 PLAYER_RADIUS = 0.3    # Meio-largura da caixa de colisão do jogador
 REACH         = 6      # Alcance máximo para interagir com blocos
@@ -60,7 +60,7 @@ pitch = 0.0            # Ângulo vertical de rotação (radianos)
 # --- Física ---
 vel_y     = 0.0        # Velocidade vertical atual
 on_ground = False      # True se o jogador está pisando em bloco
-noclip    = True       # True = voo livre sem colisão (toggle: G)
+noclip    = False      # False = colisão ativa + gravidade (toggle: G)
 
 # --- Mundo ---
 # Dicionário principal: mapeia coordenadas (x,y,z) ao tipo de bloco
@@ -492,48 +492,42 @@ def drawCrosshair():
 def drawArm():
     """Desenha o braço do jogador no HUD (canto inferior direito).
     
-    O braço sai do canto inferior direito da tela e aponta
-    na direção do centro, como no Minecraft.
+    Usa camera() + ortho() (mesma técnica do crosshair) para
+    desenhar o braço como overlay. Em ortho, objetos em Z≈0
+    ficam na frente de toda geometria do mundo (depth ≈ 0).
     """
     push()
     resetShader()
-
-    # Limpa depth buffer para o braço ficar na frente do mundo
-    gl = drawingContext
-    gl.clear(gl.DEPTH_BUFFER_BIT)
-
-    # Câmera fixa para o espaço do HUD
-    camera(0, 0, 300, 0, 0, 0, 0, 1, 0)
-    perspective(PI / 3.0, width / height, 1.0, 1000.0)
-
+    # Mesma técnica do crosshair: reseta câmera e usa ortho
+    # Em ortho, (0,0) = centro da tela
+    # width/2 = borda direita, height/2 = borda inferior
+    camera()
+    ortho()
     noStroke()
 
-    # --- Posiciona na origem do braço: canto inferior direito ---
-    # Desloca para fora da tela no canto inferior direito
-    translate(200, 200, 100)
+    # --- Posição: canto inferior direito da tela ---
+    translate(width * 0.28, height * 0.22, 0)
 
     # --- Micro-animação idle (respiração) ---
-    bob = sin(millis() / 400.0) * 3.0
+    bob = sin(millis() / 400.0) * 2.5
     translate(0, bob, 0)
 
     # --- Orientação: aponta do canto inferior direito → centro ---
-    # Rotaciona para que o braço se estenda diagonalmente
-    rotateZ(-0.8)       # Gira para apontar para cima-esquerda
-    rotateX(-0.3)       # Leve inclinação para frente
+    rotateZ(-0.65)      # Gira diagonalmente para cima-esquerda
+    rotateY(0.3)        # Leve rotação 3D para dar profundidade
+    rotateX(-0.15)      # Leve inclinação para frente
 
     # --- Braço / antebraço (cor de pele) ---
-    # O braço é um box alongado; a base fica fora da tela
-    # e a ponta (mão) aponta em direção ao centro
     push()
     fill(230, 190, 150)
-    box(35, 130, 28)
+    box(35, 150, 28)
     pop()
 
-    # --- Mão (ponta do braço, levemente mais escura) ---
+    # --- Mão (ponta do braço, mais escura) ---
     push()
-    translate(0, -80, 0)
+    translate(0, -90, 0)
     fill(215, 175, 135)
-    box(33, 28, 26)
+    box(33, 30, 26)
     pop()
 
     pop()
