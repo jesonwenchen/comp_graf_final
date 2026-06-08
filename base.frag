@@ -15,7 +15,7 @@ varying vec2 vTexCoord;    // Coordenadas UV interpoladas
 varying float vDist;       // Distância do fragmento à câmera
 
 // --- Textura ---
-uniform sampler2D uAtlas;  // Atlas de texturas (4 tiles de 16x16)
+uniform sampler2D uAtlas;  // Atlas de texturas (6 tiles de 16x16)
 
 // --- Parâmetros de Neblina ---
 uniform float uFogNear;   // Distância onde a neblina começa

@@ -21,7 +21,7 @@ import random as pyrandom
 # =================================================================
 # CONSTANTES DO MUNDO
 # =================================================================
-WORLD_SIZE = 32        # Largura e profundidade do mapa em blocos
+WORLD_SIZE = 128       # Largura e profundidade do mapa em blocos
 MAX_HEIGHT = 12        # Altura máxima que o terreno pode atingir
 SEA_LEVEL  = 4         # Nível do mar: água preenche até essa altura
 BLOCK_SIZE = 1         # Tamanho de cada bloco cúbico
@@ -29,10 +29,12 @@ BLOCK_SIZE = 1         # Tamanho de cada bloco cúbico
 # =================================================================
 # TIPOS DE BLOCO (IDs)
 # =================================================================
-AIR   = 0              # Vazio (ar) — sem bloco
-DIRT  = 1              # Terra (marrom)
-GRASS = 2              # Grama (topo verde, lados marrom/verde)
-WATER = 3              # Água (azul translúcido)
+AIR    = 0             # Vazio (ar) — sem bloco
+DIRT   = 1             # Terra (marrom)
+GRASS  = 2             # Grama (topo verde, lados marrom/verde)
+WATER  = 3             # Água (azul translúcido)
+WOOD   = 4             # Tronco de árvore (madeira)
+LEAVES = 5             # Folhas de árvore (verde escuro)
 
 # =================================================================
 # CONSTANTES DA CÂMERA E FÍSICA
@@ -73,17 +75,17 @@ solid_faces = []       # Faces de blocos sólidos (terra, grama)
 water_faces = []       # Faces de blocos de água
 
 # --- Geometria retida (GPU) ---
-# Objetos p5.Geometry criados com buildGeometry()
-# Permitem renderizar milhares de faces com uma única chamada
-solid_geo = None
-water_geo = None
+# Listas de objetos p5.Geometry criados com buildGeometry()
+# Cada lista contém chunks de geometria para evitar stack overflow
+solid_geos = []        # Chunks de blocos sólidos (terra, grama, madeira, folhas)
+water_geos = []        # Chunks de blocos de água
 
 # --- Input ---
 keys_pressed = set()   # Conjunto de teclas atualmente pressionadas
 
 # --- Shader e Textura ---
 shader_base = None     # Shader GLSL carregado (vertex + fragment)
-atlas       = None     # Texture atlas (p5.Graphics 64x16)
+atlas       = None     # Texture atlas (p5.Graphics 128x16)
 
 # --- Estado do Jogo ---
 game_started = False   # Controla a tela de início
@@ -92,21 +94,27 @@ game_started = False   # Controla a tela de início
 # =================================================================
 # FASE 4: CRIAÇÃO DO TEXTURE ATLAS (Procedural)
 # =================================================================
-# O atlas é uma imagem de 64x16 pixels contendo 4 tiles de 16x16.
+# O atlas é uma imagem de 128x16 pixels contendo 8 slots de 16x16.
 # Cada tile representa a textura de um tipo de bloco/face.
+# (6 tiles usados + 2 slots vazios para manter dimensões POT)
+#
+# IMPORTANTE: WebGL 1.0 exige texturas com dimensões potência de 2
+# (power-of-two) para renderização correta. 128x16 = POT.
 #
 # Layout do atlas (cada coluna = 16px):
-# | Tile 0: Terra | Tile 1: Grama topo | Tile 2: Grama lado | Tile 3: Água |
+# | Tile 0: Terra | Tile 1: Grama topo | Tile 2: Grama lado | Tile 3: Água | Tile 4: Madeira | Tile 5: Folhas | (vazio) | (vazio) |
 #
 # Coordenadas UV normalizadas (0 a 1):
-#   Tile 0: u ∈ [0.00, 0.25]
-#   Tile 1: u ∈ [0.25, 0.50]
-#   Tile 2: u ∈ [0.50, 0.75]
-#   Tile 3: u ∈ [0.75, 1.00]
+#   Tile 0: u ∈ [0.000, 0.125]
+#   Tile 1: u ∈ [0.125, 0.250]
+#   Tile 2: u ∈ [0.250, 0.375]
+#   Tile 3: u ∈ [0.375, 0.500]
+#   Tile 4: u ∈ [0.500, 0.625]
+#   Tile 5: u ∈ [0.625, 0.750]
 # =================================================================
 def createTextureAtlas():
     """Gera o atlas de texturas pixel a pixel usando createGraphics."""
-    pg = createGraphics(64, 16)
+    pg = createGraphics(128, 16)
     pg.noStroke()
 
     # --- Tile 0: Terra (marrom com variação de pixels) ---
@@ -156,6 +164,42 @@ def createTextureAtlas():
             pg.fill(r, g, b)
             pg.rect(48 + px, py, 1, 1)
 
+    # --- Tile 4: Madeira / Tronco (bark pattern com anéis e veios) ---
+    for px in range(16):
+        for py in range(16):
+            # Padrão de casca de árvore: listras verticais escuras
+            is_bark_line = (px % 3 == 0) or (px % 5 == 0 and py % 4 < 2)
+            if is_bark_line:
+                # Linhas escuras da casca
+                r = 60  + pyrandom.randint(-10, 10)
+                g = 35  + pyrandom.randint(-8, 8)
+                b = 15  + pyrandom.randint(-5, 5)
+            else:
+                # Corpo da madeira (marrom médio)
+                r = 120 + pyrandom.randint(-15, 15)
+                g = 75  + pyrandom.randint(-10, 10)
+                b = 30  + pyrandom.randint(-8, 8)
+            pg.fill(r, g, b)
+            pg.rect(64 + px, py, 1, 1)
+
+    # --- Tile 5: Folhas (verde vibrante e brilhante) ---
+    for px in range(16):
+        for py in range(16):
+            # Variação densa simulando folhas individuais
+            bright = pyrandom.random() > 0.3
+            if bright:
+                # Folhas claras (maioria)
+                r = 20  + pyrandom.randint(-10, 10)
+                g = 160 + pyrandom.randint(-30, 30)
+                b = 30  + pyrandom.randint(-15, 15)
+            else:
+                # Sombras entre folhas (escuras)
+                r = 10  + pyrandom.randint(-5, 5)
+                g = 90  + pyrandom.randint(-20, 20)
+                b = 15  + pyrandom.randint(-8, 8)
+            pg.fill(r, g, b)
+            pg.rect(80 + px, py, 1, 1)
+
     return pg
 
 
@@ -197,6 +241,78 @@ def generateTerrain():
                 for y in range(h + 1, SEA_LEVEL + 1):
                     world[(x, y, z)] = WATER
 
+    # --- Fase 3.3: Geração de Árvores ---
+    # Planta árvores aleatoriamente em blocos de grama acima do nível do mar.
+    # Cada árvore tem um tronco de 4-6 blocos e uma copa esférica de folhas.
+    generateTrees()
+
+
+# =================================================================
+# FASE 3.3: GERAÇÃO PROCEDURAL DE ÁRVORES
+# =================================================================
+# Após gerar o terreno, percorre todas as colunas procurando
+# blocos de grama acima do nível do mar. Plantas árvores com
+# probabilidade de ~3%, com espaçamento mínimo de 4 blocos.
+# Cada árvore tem tronco de WOOD e copa esférica de LEAVES.
+# =================================================================
+def generateTrees():
+    """Planta árvores procedurais no terreno gerado."""
+    global world
+
+    # Coleta posições de grama válidas para árvores
+    # (acima do nível do mar e longe das bordas do mapa)
+    tree_positions = []
+    margin = 3  # Margem das bordas para a copa não sair do mapa
+
+    for x in range(margin, WORLD_SIZE - margin):
+        for z in range(margin, WORLD_SIZE - margin):
+            # Encontra o bloco de grama mais alto nesta coluna
+            for y in range(MAX_HEIGHT + 1, -1, -1):
+                if world.get((x, y, z)) == GRASS:
+                    # Só planta acima do nível do mar
+                    if y >= SEA_LEVEL:
+                        # ~3% de chance de gerar árvore
+                        if pyrandom.random() < 0.03:
+                            # Verifica espaçamento mínimo com outras árvores
+                            too_close = False
+                            for tx, ty, tz in tree_positions:
+                                dist_sq = (x - tx) ** 2 + (z - tz) ** 2
+                                if dist_sq < 16:  # 4^2 = distância mínima
+                                    too_close = True
+                                    break
+                            if not too_close:
+                                tree_positions.append((x, y, z))
+                    break  # Encontrou o topo, vai pra próxima coluna
+
+    # Gera cada árvore na posição escolhida
+    for tx, ty, tz in tree_positions:
+        # Altura do tronco: 4 a 6 blocos
+        trunk_height = pyrandom.randint(4, 6)
+
+        # --- Tronco ---
+        for dy in range(1, trunk_height + 1):
+            world[(tx, ty + dy, tz)] = WOOD
+
+        # --- Copa de folhas (esfera) ---
+        leaf_radius = pyrandom.randint(2, 3)
+        leaf_center_y = ty + trunk_height  # Centro da copa no topo do tronco
+
+        for lx in range(-leaf_radius, leaf_radius + 1):
+            for ly in range(-leaf_radius, leaf_radius + 1):
+                for lz in range(-leaf_radius, leaf_radius + 1):
+                    # Distância do centro da copa (esfera)
+                    dist_sq = lx * lx + ly * ly + lz * lz
+                    if dist_sq <= leaf_radius * leaf_radius + 1:
+                        bx = tx + lx
+                        by = leaf_center_y + ly
+                        bz = tz + lz
+                        # Só coloca folha se a posição está dentro do mundo
+                        # e não sobrescreve blocos sólidos existentes
+                        if 0 <= bx < WORLD_SIZE and 0 <= bz < WORLD_SIZE and by >= 0:
+                            existing = world.get((bx, by, bz), AIR)
+                            if existing == AIR:
+                                world[(bx, by, bz)] = LEAVES
+
 
 # =================================================================
 # FASE 2: CULLING DE FACES E CONSTRUÇÃO DA MALHA
@@ -231,12 +347,14 @@ FACE_VERTS = {
 }
 
 # Cantos UV para mapear cada vértice de um quad ao tile do atlas
-# (u_local, v_local) — multiplicados pelo tamanho do tile (0.25)
+# (u_local, v_local) — multiplicados pelo tamanho do tile (1/8 = 0.125)
+# Atlas é 128x16 (POT) com 8 slots de 16px, 6 usados
+TILE_UV = 1.0 / 8.0    # Cada tile ocupa 1/8 do atlas (0.125)
 UV_CORNERS = [(0, 1), (1, 1), (1, 0), (0, 0)]
 
 
 def getTileIndex(block_type, face_name):
-    """Retorna o índice do tile no atlas (0-3) baseado no tipo e face."""
+    """Retorna o índice do tile no atlas (0-5) baseado no tipo e face."""
     if block_type == DIRT:
         return 0                    # Tile 0: textura de terra
     elif block_type == GRASS:
@@ -248,6 +366,10 @@ def getTileIndex(block_type, face_name):
             return 2                # Tile 2: lateral da grama
     elif block_type == WATER:
         return 3                    # Tile 3: textura de água
+    elif block_type == WOOD:
+        return 4                    # Tile 4: textura de madeira/tronco
+    elif block_type == LEAVES:
+        return 5                    # Tile 5: textura de folhas
     return 0
 
 
@@ -268,17 +390,21 @@ def buildMesh():
             # Desenha a face se:
             #   1) O vizinho é ar (face exposta ao vazio), OU
             #   2) O vizinho é água E o bloco atual NÃO é água
-            #      (permite ver blocos sólidos através da água)
+            #      (permite ver blocos sólidos através da água), OU
+            #   3) O vizinho é folha E o bloco atual NÃO é folha
+            #      (permite ver blocos sólidos através das folhas)
             should_draw = False
             if neighbor == AIR:
                 should_draw = True
             elif neighbor == WATER and btype != WATER:
                 should_draw = True
+            elif neighbor == LEAVES and btype != LEAVES:
+                should_draw = True
 
             if should_draw:
                 # Calcula o tile no atlas e as coordenadas UV
                 tile = getTileIndex(btype, face_name)
-                u_base = tile * 0.25    # Início do tile no atlas (0, 0.25, 0.5, 0.75)
+                u_base = tile * TILE_UV    # Início do tile no atlas
 
                 # Constrói os 4 vértices da face com posição + UV
                 verts = FACE_VERTS[face_name]
@@ -287,7 +413,7 @@ def buildMesh():
                     vx, vy, vz = verts[i]
                     cu, cv = UV_CORNERS[i]
                     # UV final: offset do tile + posição dentro do tile
-                    u = u_base + cu * 0.25
+                    u = u_base + cu * TILE_UV
                     v = float(cv)
                     face_data.append((bx + vx, by + vy, bz + vz, u, v))
 
@@ -302,51 +428,50 @@ def buildMesh():
 # CONSTRUÇÃO DE GEOMETRIA RETIDA (Retained Mode)
 # =================================================================
 # Em vez de enviar milhares de vértices à GPU a cada frame,
-# usamos buildGeometry() para pré-compilar a malha uma única vez.
-# O resultado é um objeto p5.Geometry renderizado com model().
+# usamos buildGeometry() para pré-compilar a malha.
+# O resultado são listas de objetos p5.Geometry renderizados com model().
 #
-# Vantagem: renderização instantânea (1 draw call vs milhares)
+# Para mundos grandes (128x128+), as faces são divididas em chunks
+# de MAX_FACES_PER_CHUNK para evitar stack overflow no p5.js.
+#
+# Vantagem: renderização rápida (poucos draw calls vs milhares)
 # Quando chamar: no setup() e sempre que blocos mudarem
 # =================================================================
+MAX_FACES_PER_CHUNK = 5000  # Máximo de faces (quads) por chunk de geometria
+
+
+def _buildChunkedGeo(face_list):
+    """Divide uma lista de faces em chunks e constrói geometria retida para cada um."""
+    geos = []
+    total = len(face_list)
+    for start in range(0, total, MAX_FACES_PER_CHUNK):
+        chunk = face_list[start:start + MAX_FACES_PER_CHUNK]
+        # Cria closure capturando o chunk específico
+        def make_geo(faces=chunk):
+            texture(atlas)
+            textureMode(NORMAL)
+            noStroke()
+            beginShape(QUADS)
+            for face in faces:
+                for vx, vy, vz, u, v in face:
+                    vertex(vx, -vy, vz, u, v)
+            endShape()
+        geos.append(buildGeometry(make_geo))
+    return geos
+
+
 def rebuildGeometry():
     """Reconstrói os objetos de geometria retida após mudanças."""
-    global solid_geo, water_geo
+    global solid_geos, water_geos
 
     # Primeiro, reconstrói as listas de faces visíveis
     buildMesh()
 
-    # --- Geometria dos blocos sólidos ---
-    if len(solid_faces) > 0:
-        def make_solid():
-            # texture() garante que p5.js envie aTexCoord ao shader
-            texture(atlas)
-            textureMode(NORMAL)
-            noStroke()
-            beginShape(QUADS)
-            for face in solid_faces:
-                for vx, vy, vz, u, v in face:
-                    # Nega Y: p5.js WEBGL aplica Y-flip na projeção,
-                    # negando aqui faz a dupla negação resultar em Y+ = cima
-                    vertex(vx, -vy, vz, u, v)
-            endShape()
-        solid_geo = buildGeometry(make_solid)
-    else:
-        solid_geo = None
+    # --- Geometria dos blocos sólidos (em chunks) ---
+    solid_geos = _buildChunkedGeo(solid_faces) if len(solid_faces) > 0 else []
 
-    # --- Geometria dos blocos de água ---
-    if len(water_faces) > 0:
-        def make_water():
-            texture(atlas)
-            textureMode(NORMAL)
-            noStroke()
-            beginShape(QUADS)
-            for face in water_faces:
-                for vx, vy, vz, u, v in face:
-                    vertex(vx, -vy, vz, u, v)
-            endShape()
-        water_geo = buildGeometry(make_water)
-    else:
-        water_geo = None
+    # --- Geometria dos blocos de água (em chunks) ---
+    water_geos = _buildChunkedGeo(water_faces) if len(water_faces) > 0 else []
 
 
 # =================================================================
@@ -409,7 +534,7 @@ def checkCollisionAt(x, y, z):
                 bz = int(floor(z + dz_off))
                 block = world.get((bx, by, bz), AIR)
                 # Colide apenas com blocos sólidos (não com ar ou água)
-                if block != AIR and block != WATER:
+                if block != AIR and block != WATER and block != LEAVES:
                     return True
     return False
 
@@ -709,8 +834,8 @@ def draw():
 
     # Passa uniforms para o shader via setUniform()
     shader_base.setUniform("uTempo", millis() / 1000.0)
-    shader_base.setUniform("uFogNear", 20.0)
-    shader_base.setUniform("uFogFar", 55.0)
+    shader_base.setUniform("uFogNear", 40.0)
+    shader_base.setUniform("uFogFar", 110.0)
     # Cor da neblina normalizada (0-1) — mesma cor do background
     shader_base.setUniform("uFogColor", [0.529, 0.808, 0.922])
     # Passa o atlas de textura para o shader como sampler2D
@@ -723,13 +848,13 @@ def draw():
 
     # --- Blocos Sólidos (opacos) ---
     shader_base.setUniform("uIsWater", 0.0)
-    if solid_geo is not None:
-        model(solid_geo)
+    for geo in solid_geos:
+        model(geo)
 
     # --- Blocos de Água (translúcidos, animados no shader) ---
     shader_base.setUniform("uIsWater", 1.0)
-    if water_geo is not None:
-        model(water_geo)
+    for geo in water_geos:
+        model(geo)
 
     # ==========================================================
     # BRAÇO DO JOGADOR (HUD primeira pessoa)
