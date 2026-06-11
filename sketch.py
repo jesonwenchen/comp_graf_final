@@ -21,7 +21,7 @@ import random as pyrandom
 # =================================================================
 # CONSTANTES DO MUNDO
 # =================================================================
-WORLD_SIZE = 128       # Largura e profundidade do mapa em blocos
+WORLD_SIZE = 48        # Largura e profundidade do mapa em blocos
 MAX_HEIGHT = 12        # Altura máxima que o terreno pode atingir
 SEA_LEVEL  = 4         # Nível do mar: água preenche até essa altura
 BLOCK_SIZE = 1         # Tamanho de cada bloco cúbico
@@ -765,8 +765,8 @@ def draw():
     fwd_x   =  sin(yaw)
     fwd_z   =  cos(yaw)
     # "Right" = perpendicular a forward no plano XZ
-    right_x =  cos(yaw)
-    right_z = -sin(yaw)
+    right_x = -cos(yaw)
+    right_z =  sin(yaw)
 
     # Acumula deslocamento baseado nas teclas pressionadas
     move_x = 0.0

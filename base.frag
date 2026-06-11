@@ -61,9 +61,9 @@ void main() {
     // Quando t=1: retorna a cor do céu/neblina (longe)
     vec3 finalColor = mix(texColor.rgb, uFogColor, fogFactor);
 
-    // Transparência: água é semi-transparente (alpha=0.65)
-    // Blocos sólidos mantêm o alpha original da textura (1.0)
-    float alpha = uIsWater > 0.5 ? 0.65 : texColor.a;
+    // Blocos sólidos usam alpha=1.0 fixo porque createGraphics() no Py5Script
+    // gera canvas com alpha=0, fazendo texColor.a retornar 0 (invisível)
+    float alpha = uIsWater > 0.5 ? 0.65 : 1.0;
 
     // Cor final do fragmento (pixel na tela)
     gl_FragColor = vec4(finalColor, alpha);
